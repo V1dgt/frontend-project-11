@@ -3,4 +3,6 @@
 
 Sonarcloud status:
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=V1dgt_frontend-project-11&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=V1dgt_frontend-project-11)
-[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=V1dgt_frontend-project-11&metric=coverage)](https://sonarcloud.io/summary/new_code?id=V1dgt_frontend-project-11)
+
+URL VERSEL:
+https://frontend-project-11-indol-six.vercel.app/
