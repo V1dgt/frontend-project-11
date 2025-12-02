@@ -8,13 +8,20 @@ import parser from './parser.js'
 import axios from 'axios'
 import { uniqueId } from 'lodash'
 
-const shemaUrl = yup.string().url('url_invalid')
+const validateUrl = (url, oldUrl) => {
+  const shemaUrl = yup.string().url('url_invalid')
+  return shemaUrl.validate(url)
+    .then(() => {
+      if (url === oldUrl) {
+        throw new Error('url_exists')
+      }
+    })
+}
 
-const validateUniqUrl = (url, oldUrl) => {
-  if (url === oldUrl) {
-    return 'url_exists'
-  }
-  return null
+const getResponce = (url) => {
+  const encodeUrl = encodeURIComponent(`${url}`)
+  const responce = axios.get(`https://allorigins.hexlet.app/get?disableCache=true&url=${encodeUrl}`)
+  return responce
 }
 
 yup.setLocale({
@@ -42,6 +49,26 @@ const processingPosts = (data, feed) => {
     return newPost
   })
   return editPosts
+}
+
+const downloadingPosts = (state) => {
+  const updatePosts = state.feeds.map((feed) => {
+    getResponce(feed.link)
+      .then((responce) => {
+        const parseFeedAndPosts = parser(responce.data.contents, feed.link)
+        return parseFeedAndPosts
+      })
+      .then((feedAndPosts) => {
+        const posts = processingPosts(feedAndPosts, feed)
+
+        const oldPosts = state.posts.filter(post => post.idFeed !== feed.id)
+        state.posts = [...oldPosts, ...posts]
+      })
+      .catch(error => console.log(`Не удалось обновить фид: ${error}`))
+  })
+
+  Promise.all(updatePosts)
+    .then(() => setTimeout(downloadingPosts(state), 5000))
 }
 
 const initApp = () => {
@@ -76,39 +103,34 @@ const initApp = () => {
         const formData = new FormData(form)
         const inputUrl = formData.get('url').trim()
 
-        Promise.resolve()
-          .then(() => shemaUrl.validate(inputUrl))
-          .then(() => {
-            const checkUrl = validateUniqUrl(inputUrl, watchedState.url)
-            if (checkUrl) {
-              throw new Error(checkUrl)
-            }
-          })
-          .then(() => {
-            const url = encodeURIComponent(`${inputUrl}`)
-            const responce = axios.get(`https://allorigins.hexlet.app/get?disableCache=true&url=${url}`)
-            return responce
-          })
+        validateUrl(inputUrl, watchedState.url)
+          .then(() => getResponce(inputUrl))
           .then((responce) => {
-            const parseFeedAndPosts = parser(responce.data.contents)
-            const feed = processingFeed(parseFeedAndPosts)
-            const posts = processingPosts(parseFeedAndPosts, feed)
+            const parseFeedAndPosts = parser(responce.data.contents, inputUrl)
+            return parseFeedAndPosts
+          })
+          .then((feedAndPosts) => {
+            const feed = processingFeed(feedAndPosts)
+            const posts = processingPosts(feedAndPosts, feed)
             watchedState.feeds.push(feed)
             watchedState.posts.push(...posts)
-          })
-          .then(() => {
-            watchedState.form.status = 'success'
           })
           .then(() => {
             watchedState.url = inputUrl
           })
           .then(() => {
-            watchedState.form.status = 'filling'
+            downloadingPosts(watchedState)
+          })
+          .then(() => {
+            watchedState.form.status = 'success'
           })
           .catch((error) => {
             const messageError = error.message.toLowerCase().replaceAll(" ", "")
             watchedState.form.status = 'error'
             watchedState.form.errors.push(i18Instance.t(messageError))
+          })
+          .finally(() => {
+            watchedState.form.status = 'filling'
           })
       })
     })
