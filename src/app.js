@@ -9,8 +9,8 @@ import axios from 'axios'
 import { uniqueId } from 'lodash'
 
 const validateUrl = (url, oldUrl) => {
-  const shemaUrl = yup.string().url('url_invalid')
-  return shemaUrl.validate(url)
+  const schemaUrl = yup.string().url('url_invalid')
+  return schemaUrl.validate(url)
     .then(() => {
       if (url === oldUrl) {
         throw new Error('url_exists')
@@ -18,10 +18,9 @@ const validateUrl = (url, oldUrl) => {
     })
 }
 
-const getResponce = (url) => {
+const getResponse = (url) => {
   const encodeUrl = encodeURIComponent(`${url}`)
-  const responce = axios.get(`https://allorigins.hexlet.app/get?disableCache=true&url=${encodeUrl}`)
-  return responce
+  return axios.get(`https://allorigins.hexlet.app/get?disableCache=true&url=${encodeUrl}`)
 }
 
 yup.setLocale({
@@ -51,89 +50,91 @@ const processingPosts = (data, feed) => {
   return editPosts
 }
 
-const downloadingPosts = (state) => {
-  const updatePosts = state.feeds.map((feed) => {
-    getResponce(feed.link)
-      .then((responce) => {
-        const parseFeedAndPosts = parser(responce.data.contents, feed.link)
-        return parseFeedAndPosts
-      })
+const downloadingPosts = (watchedState) => {
+  if (watchedState.feeds.length === 0) {
+    return
+  }
+  const updatePromises = watchedState.feeds.map((feed) => {
+    return getResponse(feed.link)
+      .then(response => parser(response.data.contents, feed.link))
       .then((feedAndPosts) => {
-        const posts = processingPosts(feedAndPosts, feed)
+        const newPosts = processingPosts(feedAndPosts, feed)
 
-        const oldPosts = state.posts.filter(post => post.idFeed !== feed.id)
-        state.posts = [...oldPosts, ...posts]
+        console.log(newPosts)
+        const existingLinks = new Set(watchedState.posts.map(p => p.link))
+        const uniqueNewPosts = newPosts.filter(post => !existingLinks.has(post.link))
+
+        if (uniqueNewPosts.length > 0) {
+          watchedState.posts.push(...uniqueNewPosts)
+        }
       })
-      .catch(error => console.log(`Не удалось обновить фид: ${error}`))
+      .catch(error => console.error(`Ошибка обновления ${feed.link}:`, error))
   })
 
-  Promise.all(updatePosts)
-    .then(() => setTimeout(downloadingPosts(state), 5000))
+  Promise.allSettled(updatePromises)
+    .finally(() => setTimeout(() => downloadingPosts(watchedState), 5000))
 }
 
 const initApp = () => {
   const defaultLanguage = 'ru'
   const i18Instance = i18n.createInstance()
+
   i18Instance.init({
     lng: defaultLanguage,
     debug: false,
     resources,
-  })
-    .then(() => {
-      const state = {
-        url: '',
-        form: {
-          status: 'filling',
-          errors: [],
-        },
-        feeds: [],
-        posts: [],
-      }
+  }).then(() => {
+    const state = {
+      url: '',
+      form: {
+        status: 'filling',
+        errors: [],
+      },
+      feeds: [],
+      posts: [],
+    }
 
-      const watchedState = createWatcher(state, i18Instance)
+    const watchedState = createWatcher(state, i18Instance)
+    const form = document.querySelector('.rss-form')
 
-      const form = document.querySelector('.rss-form')
+    form.addEventListener('submit', (e) => {
+      e.preventDefault()
 
-      form.addEventListener('submit', (e) => {
-        e.preventDefault()
+      watchedState.form.errors = []
+      watchedState.form.status = 'validiting'
 
-        watchedState.form.errors = []
-        watchedState.form.status = 'validiting'
+      const formData = new FormData(form)
+      const inputUrl = formData.get('url').trim()
 
-        const formData = new FormData(form)
-        const inputUrl = formData.get('url').trim()
-
-        validateUrl(inputUrl, watchedState.url)
-          .then(() => getResponce(inputUrl))
-          .then((responce) => {
-            const parseFeedAndPosts = parser(responce.data.contents, inputUrl)
-            return parseFeedAndPosts
-          })
-          .then((feedAndPosts) => {
-            const feed = processingFeed(feedAndPosts)
-            const posts = processingPosts(feedAndPosts, feed)
-            watchedState.feeds.push(feed)
-            watchedState.posts.push(...posts)
-          })
-          .then(() => {
-            watchedState.url = inputUrl
-          })
-          .then(() => {
+      validateUrl(inputUrl, watchedState.url)
+        .then(() => getResponse(inputUrl))
+        .then((response) => {
+          const parseFeedAndPosts = parser(response.data.contents, inputUrl)
+          return parseFeedAndPosts
+        })
+        .then((feedAndPosts) => {
+          const feed = processingFeed(feedAndPosts)
+          const posts = processingPosts(feedAndPosts, feed)
+          watchedState.feeds.push(feed)
+          watchedState.posts.push(...posts)
+          watchedState.url = inputUrl
+          if (watchedState.feeds.length === 1) {
             downloadingPosts(watchedState)
-          })
-          .then(() => {
-            watchedState.form.status = 'success'
-          })
-          .catch((error) => {
-            const messageError = error.message.toLowerCase().replaceAll(" ", "")
-            watchedState.form.status = 'error'
-            watchedState.form.errors.push(i18Instance.t(messageError))
-          })
-          .finally(() => {
-            watchedState.form.status = 'filling'
-          })
-      })
+          }
+        })
+        .then(() => {
+          watchedState.form.status = 'success'
+        })
+        .catch((error) => {
+          const messageError = error.message.toLowerCase().replaceAll(" ", "")
+          watchedState.form.status = 'error'
+          watchedState.form.errors.push(i18Instance.t(messageError))
+        })
+        .finally(() => {
+          watchedState.form.status = 'filling'
+        })
     })
+  })
 }
 
 export default initApp
