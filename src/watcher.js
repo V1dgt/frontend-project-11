@@ -42,7 +42,7 @@ const renderFeeds = (feeds, i18n) => {
   containerFeeds.append(ul)
 }
 
-const renderPosts = (posts, i18n) => {
+const renderPosts = (posts, i18n, watchedState) => {
   const containerPosts = document.querySelector('.posts')
   containerPosts.textContent = ''
 
@@ -63,7 +63,11 @@ const renderPosts = (posts, i18n) => {
 
   posts.map((post) => {
     const title = post.title
+    const description = post.description
     const link = post.link
+    const modalTitle = document.querySelector('.modal-title')
+    const modalBody = document.querySelector('.modal-body')
+    const modalButton = document.querySelector('.full-article')
 
     const li = document.createElement('li')
     li.classList.add('list-group-item', 'd-flex', 'justify-content-between', 'align-items-start', 'border-0', 'border-end-0')
@@ -72,17 +76,34 @@ const renderPosts = (posts, i18n) => {
     a.setAttribute('href', link)
     a.setAttribute('target', '_blank')
     a.setAttribute('rel', 'noopener noreferrer')
-    a.dataset.id = '149'
+    a.dataset.id = post.idPost
+    const isRead = watchedState.readPostIds[post.idPost]
+    if (isRead) {
+      a.classList.add('fw-normal')
+      a.classList.remove('fw-bold')
+    }
 
     const button = document.createElement('button')
     button.setAttribute('type', 'button')
     button.classList.add('btn', 'btn-outline-primary', 'btn-sm')
-    button.dataset.id = '149'
+    button.dataset.id = post.idPost
     button.setAttribute('data-bs-toggle', 'modal')
     button.setAttribute('data-bs-target', '#modal')
 
     a.textContent = title
     button.textContent = i18n.t('other_words.viewing')
+
+    const markAsReadAndShowModal = () => {
+      modalBody.textContent = description
+      modalTitle.textContent = title
+      modalButton.href = link
+      if (!watchedState.readPostIds[post.idPost]) {
+        watchedState.readPostIds[post.idPost] = true
+      }
+    }
+
+    button.addEventListener('click', markAsReadAndShowModal)
+    a.addEventListener('click', markAsReadAndShowModal)
 
     ul.append(li)
     li.append(a)
@@ -91,14 +112,17 @@ const renderPosts = (posts, i18n) => {
   containerPosts.append(ul)
 }
 
-const updateUi = (state, i18n) => {
+const updateUi = (watchedState, i18n) => {
   const feedback = document.querySelector('.feedback')
   const input = document.getElementById('url-input')
   const buttonSubmit = document.querySelector('button[type="submit"]')
-  const feeds = state.feeds
-  const posts = state.posts
+  const feeds = watchedState.feeds
+  const posts = watchedState.posts
 
-  switch (state.form.status) {
+  renderFeeds(feeds, i18n)
+  renderPosts(posts, i18n, watchedState)
+
+  switch (watchedState.form.status) {
     case 'filling':
       buttonSubmit.classList.remove('disabled')
       input.focus()
@@ -111,11 +135,9 @@ const updateUi = (state, i18n) => {
       input.classList.add('is-invalid')
       feedback.classList.remove('text-success')
       feedback.classList.add('text-danger')
-      feedback.textContent = i18n.t(`errors.${state.form.errors[0]}`)
+      feedback.textContent = i18n.t(`errors.${watchedState.form.errors[0]}`)
       break
     case 'success':
-      renderFeeds(feeds, i18n)
-      renderPosts(posts, i18n)
       buttonSubmit.classList.remove('disabled')
       input.classList.remove('is-invalid')
       feedback.classList.remove('text-danger')
@@ -125,7 +147,7 @@ const updateUi = (state, i18n) => {
       input.focus()
       break
     default:
-      throw new Error(`Unknown status: ${state.form.status}`)
+      throw new Error(`${i18n.t('unk_status')}: ${watchedState.form.status}`)
   }
 }
 

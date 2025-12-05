@@ -9,7 +9,7 @@ import axios from 'axios'
 import { uniqueId } from 'lodash'
 
 const validateUrl = (url, oldUrl) => {
-  const schemaUrl = yup.string().url('url_invalid')
+  const schemaUrl = yup.string().url('url_invalid').required('url_required')
   return schemaUrl.validate(url)
     .then(() => {
       if (url === oldUrl) {
@@ -60,7 +60,6 @@ const downloadingPosts = (watchedState) => {
       .then((feedAndPosts) => {
         const newPosts = processingPosts(feedAndPosts, feed)
 
-        console.log(newPosts)
         const existingLinks = new Set(watchedState.posts.map(p => p.link))
         const uniqueNewPosts = newPosts.filter(post => !existingLinks.has(post.link))
 
@@ -68,7 +67,7 @@ const downloadingPosts = (watchedState) => {
           watchedState.posts.push(...uniqueNewPosts)
         }
       })
-      .catch(error => console.error(`Ошибка обновления ${feed.link}:`, error))
+      .catch(error => console.error(`${i18Instance.t('upd_error')} ${feed.link}:`, error))
   })
 
   Promise.allSettled(updatePromises)
@@ -92,6 +91,7 @@ const initApp = () => {
       },
       feeds: [],
       posts: [],
+      readPostIds: {},
     }
 
     const watchedState = createWatcher(state, i18Instance)
